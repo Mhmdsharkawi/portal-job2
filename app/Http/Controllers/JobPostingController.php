@@ -1,8 +1,10 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Http\Resources\JobListingResource;
 use App\Models\JobPosting;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class JobPostingController extends Controller
 {
@@ -11,8 +13,13 @@ class JobPostingController extends Controller
      */
     public function index(Request $request)
     {
-        $query = JobPosting::query();
- 
+        $request->validate([
+            'sortBy' => ['nullable', Rule::in(['title', 'salary', 'created_at'])],
+            'order' => ['nullable', Rule::in(['asc', 'desc'])],
+        ]);
+
+        $query = JobPosting::query()->with('user')->active();
+
         //filter by job category
         if ($request->has('category')) {
             $query->where('category', $request->input('category'));
@@ -36,9 +43,21 @@ class JobPostingController extends Controller
             $query->where('salary', '<=', $request->input('salary_max'));
         }
 
-        $Postings = $query->get();
+        if ($request->has('salary')) {
+            $query->where('salary', $request->input('salary'));
+        }
 
-        return response()->json($Postings);
+        $sortBy = $request->input('sortBy', 'created_at');
+        $order = $request->input('order', 'desc');
+        $postings = $query->orderBy($sortBy, $order)->paginate(10);
+
+        return response()->json([
+            'data' => JobListingResource::collection($postings->getCollection())->resolve(),
+            'current_page' => $postings->currentPage(),
+            'last_page' => $postings->lastPage(),
+            'per_page' => $postings->perPage(),
+            'total' => $postings->total(),
+        ]);
     }
 
     /**
@@ -47,54 +66,93 @@ class JobPostingController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'title' => 'required|max:255', // Fixed validation rule
+            'title' => 'required|max:255',
             'description' => 'required',
             'company' => 'required',
             'location' => 'required',
             'salary' => 'required',
             'category' => 'required',
+            'expires_at' => 'nullable|date|after:now',
         ]);
 
-        $Posting = JobPosting::create($request->all());
+        $this->authorize('create', JobPosting::class);
 
-        return response()->json($Posting, 201); // Return created job posting with 201 status
+        $posting = JobPosting::create([
+            ...$request->only(['title', 'description', 'company', 'location', 'salary', 'category', 'expires_at']),
+            'user_id' => $request->user()->id,
+            'is_active' => true,
+        ]);
+
+        return (new JobListingResource($posting->load('user')))
+            ->response()
+            ->setStatusCode(201);
     }
 
     /**
      * Display the specified listing with the applications.
      */
-    public function show(JobPosting $Posting)
+    public function show(JobPosting $jobPosting)
     {
-        $Posting->load('applications'); // Load applications for the job
-        return response()->json($Posting);
+        return new JobListingResource($jobPosting->load('applications', 'user'));
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, JobPosting $Posting)
+    public function update(Request $request, JobPosting $jobPosting)
     {
         $request->validate([
-            'title' => 'required|max:255', // Fixed validation rule
+            'title' => 'required|max:255',
             'description' => 'required',
             'company' => 'required',
             'location' => 'required',
             'salary' => 'required',
             'category' => 'required',
+            'expires_at' => 'nullable|date|after:now',
         ]);
 
-        $Posting->update($request->all()); // Update the job posting
+        if ($jobPosting->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
-        return response()->json($Posting); // Return updated job posting
+        $this->authorize('update', $jobPosting);
+
+        $jobPosting->update($request->only([
+            'title',
+            'description',
+            'company',
+            'location',
+            'salary',
+            'category',
+            'expires_at',
+        ]));
+
+        return new JobListingResource($jobPosting->load('user'));
     }
 
     /**
      * Remove the specified job listing from storage.
      */
-    public function destroy(JobPosting $Posting)
+    public function destroy(Request $request, JobPosting $jobPosting)
     {
-        $Posting->delete(); // Delete the job posting
+        if ($jobPosting->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
-        return response()->json(null, 204); // Return no content response
+        $this->authorize('delete', $jobPosting);
+
+        $jobPosting->delete();
+
+        return response()->json(null, 204);
+    }
+
+    public function restore(Request $request, int $id)
+    {
+        $jobPosting = JobPosting::withTrashed()->findOrFail($id);
+
+        $this->authorize('restore', $jobPosting);
+        $jobPosting->restore();
+
+        return new JobListingResource($jobPosting->load('user'));
     }
 }

@@ -18,14 +18,19 @@ composer install
 ```
 
 ### 📝 Add .env Variables
-Rename `.env.example` to `.env` and configure your database:
+Copy `.env example` to `.env`:
+```bash
+# PowerShell (Windows)
+Copy-Item ".env example" ".env"
+
+# macOS/Linux
+cp ".env example" .env
+```
+
+Use SQLite for local setup:
 ```env
-DB_CONNECTION=pgsql
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_DATABASE=
-DB_USERNAME=
-DB_PASSWORD=
+DB_CONNECTION=sqlite
+DB_DATABASE=database/database.sqlite
 ```
 
 ###  Generate APP Key
@@ -33,8 +38,14 @@ DB_PASSWORD=
 php artisan key:generate
 ```
 
-### 📂 Run Migrations
+### 📂 Create SQLite DB + Run Migrations
 ```bash
+# PowerShell (Windows)
+New-Item -Path "database/database.sqlite" -ItemType File -Force
+
+# macOS/Linux
+touch database/database.sqlite
+
 php artisan migrate
 ```
 
@@ -45,7 +56,8 @@ php artisan serve
 
 ### 🎨 Run Vite (For Front-End (Only Register and Login))
 ```bash
-php artisan serve
+npm install
+npm run dev
 ```
 
 Open [http://localhost:8000](http://localhost:8000) or the provided URL.
@@ -220,10 +232,10 @@ GET http://127.0.0.1:8000/api/applications
 
 ## 🔍 Filters
 
-- **Filter by Category**: `GET http://127.0.0.1:8000/api/job-listings?category=Accounting`
-- **Filter by Salary**: `GET http://127.0.0.1:8000/api/job-listings?salary=70000`
-- **Filter by Location**: `GET http://127.0.0.1:8000/api/job-listings?location=Kampala`
-- **Filter by job title**: `GET http://127.0.0.1:8000/api/job-listings?title=Accountant`
+- **Filter by Category**: `GET http://localhost:8888/api/job-listings?category=Accounting`
+- **Filter by Salary**: `GET http://localhost:8888/api/job-listings?salary=70000`
+- **Filter by Location**: `GET http://localhost:8888/api/job-listings?location=Kampala`
+- **Filter by job title**: `GET http://localhost:8888/api/job-listings?title=Accountant`
 
 ---
 
